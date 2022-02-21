@@ -1,0 +1,3 @@
+# MIPS Assembly Emulator
+
+Inspired by, course assignment for ID1019. Planned to eventually contain all the functionality of MIPS Assembly...
