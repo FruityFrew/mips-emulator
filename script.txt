@@ -1,0 +1,10 @@
+.text
+    addi 1, 0, 5
+    lw 2, 0, arg
+    add 4, 2, 1
+    addi 5, 0, 1
+label loop
+    sub, 4, 4, 5
+    out, 4
+    bne, 4, 0, loop
+    halt

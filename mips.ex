@@ -15,9 +15,9 @@ defmodule Program do
       IO.puts "Could not found label \"" <> to_string(label) <> "\""
       {:error, label, pc}
     else
-      instr = read_instruction(code, pc)
+      all_instr = read_instruction(code, pc)
 
-      case instr do
+      case all_instr do
         {:label, label} ->
           IO.puts "Found label at pc " <> to_string(pc)
           pc
@@ -84,6 +84,7 @@ end
 
 defmodule Emulator do
   def main() do
+    # Test Script
     program = [ {:addi, 1, 0, 5},
                 {:lw, 2, 0, :arg},
                 {:add, 4, 2, 1},
@@ -112,134 +113,200 @@ defmodule Emulator do
   def run(pc, code, reg, mem, out) do
     next = Program.read_instruction(code, pc)
 
-    case next do
-      :halt ->
-        {:ok, {:out, out}, {:reg, reg}, {:mem, mem}}
-
-      {:out, rs} ->
-        IO.puts "PC: #{pc}\t | OUT $#{rs}\n"
-        pc = pc + 4
-        s = Registers.read(reg, rs)
-        out = Out.put(out, s)
-        run(pc, code, reg, mem, out)
+    eval(next, pc, code, reg, mem, out)
+  end
 
 
-      {:add, rd, rs, rt} ->
-        IO.puts "PC: #{pc}\t | ADD $#{rd}, $#{rs}, $#{rt}"
-        pc = pc + 4
-        s = Registers.read(reg, rs)
-        t = Registers.read(reg, rt)
-        d = s + t
-        reg = Registers.write(reg, rd, d)
-        IO.puts "#{s}($#{rs}) + #{t}($#{rt}) -> #{d}($#{rd})\n"
-        run(pc, code, reg, mem, out)
+  def eval({:out, rs}, pc, code, reg, mem, out) do
+    IO.puts "PC: #{pc}\t | OUT $#{rs}\n"
+    pc = pc + 4
+    s = Registers.read(reg, rs)
+    out = Out.put(out, s)
+    run(pc, code, reg, mem, out)
+  end
+  
+  def eval({:add, rd, rs, rt}, pc, code, reg, mem, out) do
+      IO.puts "PC: #{pc}\t | ADD $#{rd}, $#{rs}, $#{rt}"
+      pc = pc + 4
+      s = Registers.read(reg, rs)
+      t = Registers.read(reg, rt)
+      r = s + t
+      reg = Registers.write(reg, rd, r)
+      IO.puts "#{s}($#{rs}) + #{t}($#{rt}) -> #{r}($#{rd})\n"
+      run(pc, code, reg, mem, out)
+  end
+
+  def eval({:addi, rd, rs, imm}, pc, code, reg, mem, out) do
+    IO.puts "PC: #{pc}\t | ADDI $#{rd}, $#{rs}, #{imm}"
+    pc = pc + 4
+    s = Registers.read(reg, rs)
+    r = s + imm
+    reg = Registers.write(reg, rd, r)
+    IO.puts "#{s}($#{rs}) + #{imm} -> #{r}($#{rd})\n"
+    run(pc, code, reg, mem, out)
+  end
+
+  def eval({:sub, rd, rs, rt}, pc, code, reg, mem, out) do
+    IO.puts "PC: #{pc}\t | SUB $#{rd}, $#{rs}, $#{rt}"
+    pc = pc + 4
+    s = Registers.read(reg, rs)
+    t = Registers.read(reg, rt)
+    r = s - t
+    reg = Registers.write(reg, rd, r)
+    IO.puts "#{s}($#{rs}) - #{t}($#{rt}) -> #{r}($#{rd})\n"
+    run(pc, code, reg, mem, out)
+  end
+
+  def eval({:and, rd, rs, rt}, pc, code, reg, mem, out) do
+    IO.puts "PC: #{pc}\t | AND $#{rd}, $#{rs}, $#{rt}"
+    pc = pc + 4
+    s = Registers.read(reg, rs)
+    t = Registers.read(reg, rt)
+    r = Bitwise.and(s, t)
+    reg = Registers.write(reg, rd, r)
+    IO.puts "#{s}($#{rs}) & #{t}($#{rt}) -> #{r}($#{rd})\n"
+    run(pc, code, reg, mem, out)
+  end
+
+  def eval({:andi, rd, rs, imm}, pc, code, reg, mem, out) do
+    IO.puts "PC: #{pc}\t | ANDI $#{rd}, $#{rs}, #{imm}"
+    pc = pc + 4
+    s = Registers.read(reg, rs)
+    r = s + imm
+    reg = Registers.write(reg, rd, r)
+    IO.puts "#{s}($#{rs}) & #{imm} -> #{r}($#{rd})\n"
+    run(pc, code, reg, mem, out)
+  end
+
+  def eval({:lw, rd, rt, label}, pc, code, reg, mem, out) do
+    IO.puts "PC: #{pc}\t | LW $#{rd}, $#{rt}, #{label}\n"
+    pc = pc + 4
+    t = Registers.read(reg, rt)
+    word = Program.find_word(mem, label, 0)
+    run(pc, code, reg, mem, out)
+  end
+
+  def eval({:sw, rs, rt, offset}, pc, code, reg, mem, out) do
+    IO.puts "PC: #{pc}\t | SW $#{rs}, (#{offset})$#{rt}\n"
+    pc = pc + 4
+    s = Registers.read(reg, rs)
+    t = Registers.read(reg, rt)
+    mem = List.replace_at(mem, t+offset, s)
+    run(pc, code, reg, mem, out)
+  end
 
 
-      {:addi, rd, rs, imm} ->
-        IO.puts "PC: #{pc}\t | ADDI $#{rd}, $#{rs}, #{imm}"
-        pc = pc + 4
-        s = Registers.read(reg, rs)
-        d = s + imm
-        reg = Registers.write(reg, rd, d)
-        IO.puts "#{s}($#{rs}) + #{imm} -> #{d}($#{rd})\n"
-        run(pc, code, reg, mem, out)
+  def eval({:bne, rs, rt, label}, pc, code, reg, mem, out) do
+    IO.puts "PC: #{pc}\t | BNE $#{rs}, $#{rt}, #{label}"
+    s = Registers.read(reg, rs)
+    t = Registers.read(reg, rt)
 
+    IO.puts "$#{rs}(#{s}) != $#{rt}(#{t}) ?"
 
-      {:sub, rd, rs, rt} ->
-        IO.puts "PC: #{pc}\t | SUB $#{rd}, $#{rs}, $#{rt}"
-        pc = pc + 4
-        s = Registers.read(reg, rs)
-        t = Registers.read(reg, rt)
-        d = s - t
-        reg = Registers.write(reg, rd, d)
-        IO.puts "#{s}($#{rs}) - #{t}($#{rt}) -> #{d}($#{rd})\n"
-        run(pc, code, reg, mem, out)
-
-
-      {:and, rd, rs, rt} ->
-        IO.puts "PC: #{pc}\t | AND $#{rd}, $#{rs}, $#{rt}"
-        pc = pc + 4
-        s = Registers.read(reg, rs)
-        t = Registers.read(reg, rt)
-        d = Bitwise.and(s, t)
-        reg = Registers.write(reg, rd, d)
-        IO.puts "#{s}($#{rs}) & #{t}($#{rt}) -> #{d}($#{rd})\n"
-        run(pc, code, reg, mem, out)
-
-      {:andi, rd, rs, imm} ->
-        IO.puts "PC: #{pc}\t | ANDI $#{rd}, $#{rs}, #{imm}"
-        pc = pc + 4
-        s = Registers.read(reg, rs)
-        d = s + imm
-        reg = Registers.write(reg, rd, d)
-        IO.puts "#{s}($#{rs}) & #{imm} -> #{d}($#{rd})\n"
-        run(pc, code, reg, mem, out)
-
-      {:lw, rd, rt, label} ->
-        IO.puts "PC: #{pc}\t | LW $#{rd}, $#{rt}, #{label}\n"
-        pc = pc + 4
-        t = Registers.read(reg, rt)
-        word = Program.find_word(mem, label, 0)
-        run(pc, code, reg, mem, out)
-
-
-      {:sw, rs, rt, offset} ->
-        IO.puts "PC: #{pc}\t | SW $#{rs}, (#{offset})$#{rt}\n"
-        pc = pc + 4
-        s = Registers.read(reg, rs)
-        t = Registers.read(reg, rt)
-        mem = List.replace_at(mem, t+offset, s)
-        run(pc, code, reg, mem, out)
-
-
-      {:bne, rs, rt, label} ->
-        IO.puts "PC: #{pc}\t | BNE $#{rs}, $#{rt}, #{label}"
-        s = Registers.read(reg, rs)
-        t = Registers.read(reg, rt)
-
-        IO.puts "$#{rs}(#{s}) != $#{rt}(#{t}) ?"
-
-        if s != t do
-          pc = Program.find_label(code, label, 0)
-          IO.puts "BRANCHING TO #{label}(PC=#{pc})\n"
-          run(pc, code, reg, mem, out)
-        else
-          IO.puts "NO BRANCHING\n"
-          pc = pc + 4
-          run(pc, code, reg, mem, out)
-        end
-
-
-      {:beq, rs, rt, label} ->
-        IO.puts "PC: #{pc}\t | BEQ $#{rs}, $#{rt}, #{label}"
-        s = Registers.read(reg, rs)
-        t = Registers.read(reg, rt)
-
-        IO.puts "$#{rs}(#{s}) == $#{rt}(#{t}) ?"
-
-        if s == t do
-          pc = Program.find_label(code, label, 0)
-          IO.puts "BRACHING TO #{label}(PC=#{pc})\n"
-          run(pc, code, reg, mem, out)
-        else
-          IO.puts "NO BRANCHING\n"
-          pc = pc + 4
-          run(pc, code, reg, mem, out)
-        end
-
-
-      {:label, label} ->
-        IO.puts "PC: #{pc}\t | LABEL #{label}\n"
-        pc = pc + 4
-        run(pc, code, reg, mem, out)
-
-
-      anything_else ->
-        {:error, "Failed to evaluate an expression",
-                {:expression, anything_else},
-                {:registers, reg},
-                {:out, out}
-              }
+    if s != t do
+      pc = Program.find_label(code, label, 0)
+      IO.puts "BRANCHING TO #{label}(PC=#{pc})\n"
+      run(pc, code, reg, mem, out)
+    else
+      IO.puts "NO BRANCHING\n"
+      pc = pc + 4
+      run(pc, code, reg, mem, out)
     end
   end
+
+  def eval({:beq, rs, rt, label}, pc, code, reg, mem, out) do
+    IO.puts "PC: #{pc}\t | BEQ $#{rs}, $#{rt}, #{label}"
+    s = Registers.read(reg, rs)
+    t = Registers.read(reg, rt)
+
+    IO.puts "$#{rs}(#{s}) == $#{rt}(#{t}) ?"
+
+    if s == t do
+      pc = Program.find_label(code, label, 0)
+      IO.puts "BRACHING TO #{label}(PC=#{pc})\n"
+      run(pc, code, reg, mem, out)
+    else
+      IO.puts "NO BRANCHING\n"
+      pc = pc + 4
+      run(pc, code, reg, mem, out)
+    end
+  end
+
+
+  def eval({:label, label}, pc, code, reg, mem, out) do
+    IO.puts "PC: #{pc}\t | LABEL #{label}\n"
+    pc = pc + 4
+    run(pc, code, reg, mem, out)
+  end
+
+  def eval(expr, pc, code, reg, mem, out) do
+    {:error, "Failed to evaluate an expression",
+            {:expression, expr},
+            {:registers, reg},
+            {:out, out}
+    }
+  end
+end
+
+
+defmodule Loader do
+  def read_file(file_name) do
+    case File.read(file_name) do
+      {:ok, content} ->
+        IO.puts content
+
+      {:error, msg} -> 
+        {:error, msg}
+    end
+  end
+
+  @spec load(String.t) :: list | {atom, String.t}
+  def load(file_name) do
+    case File.read(file_name) do
+      {:ok, content} ->
+        filter_script(content)
+      
+      {:error, msg} ->
+        IO.puts "Could not load file \'#{file_name}\'." 
+        {:error, msg}
+
+    end
+  end
+
+  @spec filter_script(String.t) :: list
+  def filter_script(content) do
+    content 
+    |> String.replace(",", " ")
+    |> String.split("\n", trim: true)
+    |> Enum.map(fn s -> String.trim(s) end)
+    |> Enum.map(fn s -> String.split(s, " ", trim: true) end)
+    |> parse_instructions()
+  end
+
+  @spec parse_instructions(list) :: list
+  def parse_instructions(raw_instructions) do
+    all_instr = []
+    process_instruction(raw_instructions, all_instr)
+  end
+
+  @spec process_instruction([[string]], [tuple]) :: list
+  def process_instruction([], all_instr) do all_instr end
+  def process_instruction([[_] | rest], all_instr) do
+    process_instruction(rest, all_instr)    # Reffers to block types (i.e. .text, .data, etc); ignored for now
+  end
+  
+  def process_instruction([["label", target] | rest], all_instr) do 
+    all_instr ++ [{:label, String.to_atom(target)}]
+    process_instruction(rest, all_instr)
+  end
+
+  def process_instruction([[instr, p] | rest], all_instr) do
+    all_instr = all_instr ++ [{String.to_atom(instr), Integer.parse(p)}]
+    process_instruction(rest, all_instr)
+  end
+
+  def process_instruction([[instr, p, q, r] | rest], all_instr) do
+    all_instr = all_instr ++ [{String.to_atom(instr), Integer.parse(p), Integer.parse(q), Integer.parse(r)}]
+    process_instruction(rest, all_instr)
+  end 
 end
